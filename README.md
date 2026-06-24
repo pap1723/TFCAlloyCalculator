@@ -11,7 +11,9 @@ A static TerraFirmaCraft alloy calculator that can be hosted directly on GitHub 
 ## Features
 
 - Current crucible/vessel metal input
-- Per-row unit conversion: mB, 10 mB unit, ingot, double ingot, sheet, double sheet, vessel
+- Per-row unit conversion: mB, 10 mB unit, nugget/small item, ingot/mold, double ingot, sheet, double sheet, vessel
+- Settings panel for changing how much fluid one ingot/mold requires and how much fluid each item provides
+- Import/export custom unit and item settings as JSON
 - Alloy profile selector for TFC versions or modpacks
 - Import/export custom alloy profiles as JSON
 - Automatic alloy detection
@@ -21,7 +23,7 @@ A static TerraFirmaCraft alloy calculator that can be hosted directly on GitHub 
 - Smart correction suggestions for invalid mixes
 - Batch planner with valid ingredient ranges
 - Closest simple recipe solver using selectable granularity: 1 mB, 10 mB units, or whole ingots
-- Browser local storage for saved state and custom profiles
+- Browser local storage for saved state, custom profiles, and custom unit settings
 
 ## Hosting on GitHub Pages
 
@@ -45,6 +47,29 @@ Each alloy looks like this:
 ```
 
 The two numbers are the minimum and maximum valid percentage for that ingredient.
+
+## Custom unit and item settings
+
+Open **Settings** in the app to change fluid amounts without editing code. This controls every unit conversion in the app, including metal input rows, capacity, batch planning, and recipe granularity.
+
+Useful examples:
+
+- `Ingot / Mold`: how many mB are required to fill one ingot mold.
+- `Nugget / Small Item`: how many mB one small melted item provides.
+- `Vessel`: how much a vessel can hold if your pack changes vessel capacity.
+- Custom rows: add any modpack-specific melted item and the mB it contributes.
+
+Unit settings can be exported, downloaded, imported, or pasted as JSON:
+
+```json
+[
+  { "id": "mb", "label": "mB", "mb": 1, "quick": true, "locked": true },
+  { "id": "ingot", "label": "Ingot / Mold", "mb": 100, "quick": true, "locked": true },
+  { "id": "nugget", "label": "Nugget / Small Item", "mb": 10, "quick": false, "locked": false }
+]
+```
+
+The `quick` flag makes the unit appear in compact selectors like capacity and batch output. All units appear in metal input rows.
 
 ## Custom profile JSON format
 

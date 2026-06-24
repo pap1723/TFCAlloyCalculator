@@ -14,6 +14,7 @@
       <p class="subtitle">Check molten metal mixes, recover mistakes, and plan exact batches for GitHub Pages.</p>
     </div>
     <div class="header-actions">
+      <a class="button-link secondary" href="#settingsPanel">Settings</a>
       <button id="copySummaryBtn" class="secondary">Copy Summary</button>
       <button id="resetBtn" class="danger">Reset</button>
     </div>
@@ -55,7 +56,7 @@
       <details class="details-card">
         <summary>Unit conversion</summary>
         <div id="unitReference" class="unit-grid"></div>
-        <p class="fine-print">Units are editable in <code>app.js</code>. Ore yields can vary by version or modpack, so this app focuses on molten metal amounts.</p>
+        <p class="fine-print">Units are editable in <a href="#settingsPanel">Settings</a>. Change these if your TFC version or modpack uses different mold, ingot, or melting amounts.</p>
       </details>
     </section>
 
@@ -111,6 +112,42 @@
       <div id="planOutput" class="plan-output"></div>
     </section>
 
+
+    <section id="settingsPanel" class="panel settings-panel">
+      <h2>Settings: Unit & Item Amounts</h2>
+      <p>Customize how much fluid one ingot or mold requires, plus how much molten metal each item contributes when melted. These values are used by every calculator, planner, solver, and capacity warning.</p>
+      <div class="settings-actions">
+        <button id="addUnitBtn">+ Add Unit / Item</button>
+        <button id="saveUnitSettingsBtn">Save Unit Settings</button>
+        <button id="resetUnitSettingsBtn" class="danger">Reset Unit Defaults</button>
+        <button id="exportUnitSettingsBtn" class="secondary">Export Unit JSON</button>
+      </div>
+      <div class="table-scroll">
+        <table class="settings-table">
+          <thead>
+            <tr>
+              <th>Label shown in app</th>
+              <th>Fluid amount (mB)</th>
+              <th>Use in quick selectors</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="unitSettingsRows"></tbody>
+        </table>
+      </div>
+      <p class="fine-print">Examples: if one ingot mold needs 100 mB, set “Ingot / Mold” to 100. If a melted item gives 10 mB, add it as a custom unit so rows can be entered directly in that item count.</p>
+      <label class="field">
+        <span>Unit settings JSON</span>
+        <textarea id="unitSettingsJson" spellcheck="false"></textarea>
+      </label>
+      <div class="settings-actions">
+        <button id="applyUnitJsonBtn">Apply Unit JSON</button>
+        <button id="downloadUnitSettingsBtn" class="secondary">Download Unit JSON</button>
+        <label class="file-button">Import Unit JSON<input id="importUnitSettingsInput" type="file" accept="application/json,.json" /></label>
+      </div>
+      <div id="unitSettingsMessage" class="warnings"></div>
+    </section>
+
     <section class="panel profile-panel">
       <h2>Profiles & Import / Export</h2>
       <p>Use profiles for TFC versions or modpacks. Export a JSON profile, edit it, then import it back.</p>
@@ -137,7 +174,7 @@
   </main>
 
   <footer>
-    <p>Static app for GitHub Pages. Profile and unit data live in <code>app.js</code> and saved changes stay in browser local storage.</p>
+    <p>Static app for GitHub Pages. Profile, unit, and item-melting settings are saved in browser local storage and can be exported as JSON.</p>
   </footer>
 
   <template id="rowTemplate">

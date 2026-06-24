@@ -1,15 +1,18 @@
 'use strict';
 
 // Edit these defaults for your server/modpack. A profile can also be imported/exported in the UI.
-const UNIT_DEFS = [
-  { id: 'mb', label: 'mB', mb: 1 },
-  { id: 'unit10', label: '10 mB unit', mb: 10 },
-  { id: 'ingot', label: 'Ingot', mb: 100 },
-  { id: 'double_ingot', label: 'Double ingot', mb: 200 },
-  { id: 'sheet', label: 'Sheet', mb: 200 },
-  { id: 'double_sheet', label: 'Double sheet', mb: 400 },
-  { id: 'vessel', label: 'Vessel', mb: 400 },
+const DEFAULT_UNIT_DEFS = [
+  { id: 'mb', label: 'mB', mb: 1, quick: true, locked: true },
+  { id: 'unit10', label: '10 mB unit', mb: 10, quick: true },
+  { id: 'nugget', label: 'Nugget / Small Item', mb: 10, quick: false },
+  { id: 'ingot', label: 'Ingot / Mold', mb: 100, quick: true, locked: true },
+  { id: 'double_ingot', label: 'Double ingot', mb: 200, quick: false },
+  { id: 'sheet', label: 'Sheet', mb: 200, quick: false },
+  { id: 'double_sheet', label: 'Double sheet', mb: 400, quick: false },
+  { id: 'vessel', label: 'Vessel', mb: 400, quick: true },
 ];
+
+let unitDefs = loadUnitDefs();
 
 const DEFAULT_PROFILES = [
   {
@@ -58,6 +61,9 @@ const els = {
   unitReference: document.querySelector('#unitReference'),
   profileJson: document.querySelector('#profileJson'),
   profileMessage: document.querySelector('#profileMessage'),
+  unitSettingsRows: document.querySelector('#unitSettingsRows'),
+  unitSettingsJson: document.querySelector('#unitSettingsJson'),
+  unitSettingsMessage: document.querySelector('#unitSettingsMessage'),
 };
 
 function activeProfile() {
@@ -73,7 +79,11 @@ function metals() {
 }
 
 function unitById(id) {
-  return UNIT_DEFS.find(u => u.id === id) || UNIT_DEFS[0];
+  return unitDefs.find(u => u.id === id) || unitDefs[0];
+}
+
+function mbUnit() {
+  return unitDefs.find(u => u.id === 'mb') || { id: 'mb', label: 'mB', mb: 1, quick: true, locked: true };
 }
 
 function fmt(num, digits = 2) {
@@ -95,7 +105,7 @@ function slugify(value) {
 }
 
 function populateUnitSelect(select, includeMbOnly = false) {
-  const units = includeMbOnly ? UNIT_DEFS.filter(u => ['mb', 'unit10', 'ingot', 'vessel'].includes(u.id)) : UNIT_DEFS;
+  const units = includeMbOnly ? unitDefs.filter(u => u.quick || ['mb', 'unit10', 'ingot', 'vessel'].includes(u.id)) : unitDefs;
   select.innerHTML = units.map(u => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.label)}</option>`).join('');
 }
 
@@ -118,7 +128,7 @@ function populateTargets(selected) {
 }
 
 function renderUnitReference() {
-  els.unitReference.innerHTML = UNIT_DEFS.map(u => `<div><strong>${escapeHtml(u.label)}</strong><span>${fmtMb(u.mb)}</span></div>`).join('');
+  els.unitReference.innerHTML = unitDefs.map(u => `<div><strong>${escapeHtml(u.label)}</strong><span>${fmtMb(u.mb)}</span></div>`).join('');
 }
 
 function addRow(metal = 'Copper', amount = '', unit = 'mb') {
@@ -508,8 +518,10 @@ function compositionText(mix) {
 }
 
 function asCommonUnits(mb) {
-  if (Math.abs(mb % 100) < 1e-8) return `${fmt(mb / 100)} ingot${mb === 100 ? '' : 's'}`;
-  if (Math.abs(mb % 10) < 1e-8) return `${fmt(mb / 10)} × 10 mB units`;
+  const ingotMb = unitById('ingot').mb || 100;
+  const unit10Mb = unitById('unit10').mb || 10;
+  if (Math.abs(mb % ingotMb) < 1e-8) return `${fmt(mb / ingotMb)} ${unitById('ingot').label}`;
+  if (Math.abs(mb % unit10Mb) < 1e-8) return `${fmt(mb / unit10Mb)} × ${unitById('unit10').label}`;
   return `${fmt(mb)} mB`;
 }
 
@@ -604,6 +616,174 @@ function importProfileFile(file) {
   reader.readAsText(file);
 }
 
+
+function cloneUnits(units) {
+  return units.map(u => ({
+    id: slugify(u.id || u.label),
+    label: String(u.label || u.id || 'Custom unit'),
+    mb: Number(u.mb),
+    quick: Boolean(u.quick),
+    locked: Boolean(u.locked),
+  }));
+}
+
+function validateUnits(units) {
+  if (!Array.isArray(units) || !units.length) throw new Error('Unit settings must be a non-empty array.');
+  const seen = new Set();
+  const out = units.map((unit, index) => {
+    const label = String(unit.label || unit.name || '').trim();
+    if (!label) throw new Error(`Unit at row ${index + 1} needs a label.`);
+    const mb = Number(unit.mb);
+    if (!Number.isFinite(mb) || mb <= 0) throw new Error(`${label} needs a positive mB amount.`);
+    let id = slugify(unit.id || label);
+    if (seen.has(id)) id = `${id}-${index + 1}`;
+    seen.add(id);
+    return { id, label, mb, quick: Boolean(unit.quick), locked: Boolean(unit.locked) };
+  });
+  const mb = out.find(u => u.id === 'mb') || { id: 'mb', label: 'mB', mb: 1, quick: true, locked: true };
+  mb.mb = 1;
+  mb.quick = true;
+  mb.locked = true;
+  if (!out.some(u => u.id === 'mb')) out.unshift(mb);
+  return out;
+}
+
+function loadUnitDefs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('tfcUnitDefs') || 'null');
+    if (Array.isArray(saved) && saved.length) return validateUnits(saved);
+  } catch (_) {}
+  return cloneUnits(DEFAULT_UNIT_DEFS);
+}
+
+function persistUnitDefs() {
+  localStorage.setItem('tfcUnitDefs', JSON.stringify(unitDefs));
+}
+
+function unitSettingsForExport() {
+  return validateUnits(unitDefs).map(({ id, label, mb, quick, locked }) => ({ id, label, mb, quick, locked }));
+}
+
+function updateUnitSettingsJsonBox() {
+  els.unitSettingsJson.value = JSON.stringify(unitSettingsForExport(), null, 2);
+}
+
+function renderUnitSettings() {
+  els.unitSettingsRows.innerHTML = unitDefs.map(unit => `<tr data-unit-id="${escapeHtml(unit.id)}">
+    <td><input class="unit-label-input" value="${escapeHtml(unit.label)}" ${unit.id === 'mb' ? 'readonly' : ''}></td>
+    <td><input class="unit-mb-input" type="number" min="0.0001" step="0.01" value="${escapeHtml(unit.mb)}" ${unit.id === 'mb' ? 'readonly' : ''}></td>
+    <td><label class="checkbox-field"><input class="unit-quick-input" type="checkbox" ${unit.quick ? 'checked' : ''}> Quick</label></td>
+    <td><button class="remove-unit-row danger" ${unit.locked ? 'disabled title="Required unit"' : ''}>×</button></td>
+  </tr>`).join('');
+  els.unitSettingsRows.querySelectorAll('input').forEach(input => input.addEventListener('input', () => collectUnitSettings(false)));
+  els.unitSettingsRows.querySelectorAll('.remove-unit-row').forEach(button => button.addEventListener('click', () => {
+    const id = button.closest('tr').dataset.unitId;
+    unitDefs = unitDefs.filter(u => u.id !== id || u.locked);
+    applyUnitDefs(unitDefs, 'Removed unit/item.');
+  }));
+  updateUnitSettingsJsonBox();
+}
+
+function collectUnitSettings(shouldApply = true) {
+  const rows = [...els.unitSettingsRows.querySelectorAll('tr')];
+  const next = rows.map(row => {
+    const existing = unitById(row.dataset.unitId);
+    const label = row.querySelector('.unit-label-input').value.trim();
+    return {
+      id: existing.id,
+      label: label || existing.label,
+      mb: Number(row.querySelector('.unit-mb-input').value),
+      quick: row.querySelector('.unit-quick-input').checked,
+      locked: existing.locked,
+    };
+  });
+  if (!shouldApply) {
+    try { els.unitSettingsJson.value = JSON.stringify(validateUnits(next), null, 2); }
+    catch (_) {}
+    return;
+  }
+  applyUnitDefs(next, 'Saved unit settings.');
+}
+
+function applyUnitDefs(nextUnits, message = 'Applied unit settings.') {
+  const oldRowUnits = [...els.rows.querySelectorAll('.unit-select')].map(select => select.value);
+  const oldCapacityUnit = els.capacityUnit.value;
+  const oldPlannedUnit = els.plannedUnit.value;
+  unitDefs = validateUnits(nextUnits);
+  persistUnitDefs();
+  refreshAllUnitSelects(oldRowUnits, oldCapacityUnit, oldPlannedUnit);
+  renderUnitReference();
+  renderGranularityOptions();
+  renderUnitSettings();
+  showUnitSettingsMessage(message, 'note');
+  update();
+}
+
+function refreshAllUnitSelects(rowUnits = [], capacityUnit = 'mb', plannedUnit = 'mb') {
+  populateUnitSelect(els.capacityUnit, true);
+  els.capacityUnit.value = unitDefs.some(u => u.id === capacityUnit) ? capacityUnit : 'mb';
+  populateUnitSelect(els.plannedUnit, true);
+  els.plannedUnit.value = unitDefs.some(u => u.id === plannedUnit) ? plannedUnit : 'mb';
+  [...els.rows.querySelectorAll('.unit-select')].forEach((select, index) => {
+    const previous = rowUnits[index] || select.value;
+    populateUnitSelect(select);
+    select.value = unitDefs.some(u => u.id === previous) ? previous : 'mb';
+  });
+}
+
+function renderGranularityOptions() {
+  const options = [
+    { value: 1, label: '1 mB' },
+    { value: unitById('unit10').mb || 10, label: unitById('unit10').label || '10 mB unit' },
+    { value: unitById('ingot').mb || 100, label: unitById('ingot').label || 'Whole ingots / molds' },
+  ];
+  const current = els.granularity.value;
+  els.granularity.innerHTML = options.map(g => `<option value="${escapeHtml(g.value)}">${escapeHtml(g.label)} (${fmtMb(Number(g.value))})</option>`).join('');
+  els.granularity.value = [...els.granularity.options].some(o => o.value === current) ? current : String(options[1].value);
+}
+
+function addUnitSettingRow() {
+  const id = `custom-${Date.now()}`;
+  unitDefs.push({ id, label: 'Custom item', mb: 100, quick: false, locked: false });
+  applyUnitDefs(unitDefs, 'Added custom unit/item. Edit its name and mB amount, then save.');
+}
+
+function exportUnitSettingsToClipboard() {
+  updateUnitSettingsJsonBox();
+  navigator.clipboard?.writeText(els.unitSettingsJson.value);
+  showUnitSettingsMessage('Unit JSON copied to the textbox and clipboard.', 'note');
+}
+
+function downloadUnitSettings() {
+  updateUnitSettingsJsonBox();
+  const blob = new Blob([els.unitSettingsJson.value], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'tfc-unit-settings.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importUnitSettingsFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try { applyUnitDefs(JSON.parse(String(reader.result)), 'Imported unit settings.'); }
+    catch (err) { showUnitSettingsMessage(err.message || 'Could not import unit settings.', 'warning'); }
+  };
+  reader.readAsText(file);
+}
+
+function resetUnitSettings() {
+  unitDefs = cloneUnits(DEFAULT_UNIT_DEFS);
+  applyUnitDefs(unitDefs, 'Reset unit settings to defaults.');
+}
+
+function showUnitSettingsMessage(message, cls = 'note') {
+  els.unitSettingsMessage.innerHTML = `<div class="${cls}">${escapeHtml(message)}</div>`;
+}
+
 function loadProfiles() {
   try {
     const saved = JSON.parse(localStorage.getItem('tfcProfiles') || 'null');
@@ -645,7 +825,7 @@ function loadState() {
       els.capacityUnit.value = saved.capacityUnit || 'mb';
       els.plannedBatch.value = saved.batch || 400;
       els.plannedUnit.value = saved.plannedUnit || 'mb';
-      els.granularity.value = saved.granularity || '10';
+      els.granularity.value = saved.granularity || String(unitById('unit10').mb || 10);
       if (saved.rows?.length) {
         els.rows.innerHTML = '';
         saved.rows.forEach(r => addRow(r.metal, r.amount, r.unit || 'mb'));
@@ -666,7 +846,7 @@ function reset() {
   els.capacityUnit.value = 'mb';
   els.plannedBatch.value = 400;
   els.plannedUnit.value = 'mb';
-  els.granularity.value = '10';
+  els.granularity.value = String(unitById('unit10').mb || 10);
   addRow('Copper', '', 'mb');
   addRow('Tin', '', 'mb');
   populateTargets('Bronze');
@@ -702,13 +882,9 @@ function init() {
   populateUnitSelect(els.plannedUnit, true);
   els.capacityUnit.value = 'mb';
   els.plannedUnit.value = 'mb';
-  els.granularity.innerHTML = [
-    { value: 1, label: '1 mB' },
-    { value: 10, label: '10 mB units' },
-    { value: 100, label: 'Whole ingots' },
-  ].map(g => `<option value="${g.value}">${g.label}</option>`).join('');
-  els.granularity.value = '10';
+  renderGranularityOptions();
   renderUnitReference();
+  renderUnitSettings();
   rebuildForProfile(false);
   loadState();
 
@@ -730,6 +906,19 @@ function init() {
     catch (err) { showProfileMessage(err.message || 'Could not apply profile JSON.', 'warning'); }
   });
   document.querySelector('#importProfileInput').addEventListener('change', event => importProfileFile(event.target.files?.[0]));
+  document.querySelector('#addUnitBtn').addEventListener('click', addUnitSettingRow);
+  document.querySelector('#saveUnitSettingsBtn').addEventListener('click', () => {
+    try { collectUnitSettings(true); }
+    catch (err) { showUnitSettingsMessage(err.message || 'Could not save unit settings.', 'warning'); }
+  });
+  document.querySelector('#resetUnitSettingsBtn').addEventListener('click', resetUnitSettings);
+  document.querySelector('#exportUnitSettingsBtn').addEventListener('click', exportUnitSettingsToClipboard);
+  document.querySelector('#downloadUnitSettingsBtn').addEventListener('click', downloadUnitSettings);
+  document.querySelector('#applyUnitJsonBtn').addEventListener('click', () => {
+    try { applyUnitDefs(JSON.parse(els.unitSettingsJson.value), 'Applied unit settings from JSON.'); }
+    catch (err) { showUnitSettingsMessage(err.message || 'Could not apply unit JSON.', 'warning'); }
+  });
+  document.querySelector('#importUnitSettingsInput').addEventListener('change', event => importUnitSettingsFile(event.target.files?.[0]));
   document.querySelectorAll('.quick-add button').forEach(btn => {
     btn.addEventListener('click', () => {
       if (!activeAmountInput) activeAmountInput = els.rows.querySelector('.amount-input');
