@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TerraFirmaCraft Alloy Calculator</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div>
+      <p class="eyebrow">Minecraft TerraFirmaCraft</p>
+      <h1>Alloy Calculator</h1>
+      <p class="subtitle">Check your molten metal mix, plan additions, and avoid unknown ingots.</p>
+    </div>
+    <div class="header-actions">
+      <button id="copySummaryBtn" class="secondary">Copy Summary</button>
+      <button id="resetBtn" class="danger">Reset</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel input-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Current Crucible / Vessel</h2>
+          <p>Use any consistent unit. In modern TFC, mB is convenient: 1 ingot = 100 mB.</p>
+        </div>
+        <button id="addRowBtn">+ Add Metal</button>
+      </div>
+
+      <div class="quick-add">
+        <button data-fill="100">+100</button>
+        <button data-fill="10">+10</button>
+        <button data-fill="1">+1</button>
+        <span>Adds to the selected row amount.</span>
+      </div>
+
+      <div id="rows" class="rows" aria-label="Metal input rows"></div>
+
+      <details class="details-card">
+        <summary>Ore / item unit reminders</summary>
+        <div class="unit-grid">
+          <div><strong>Ingot</strong><span>100 mB</span></div>
+          <div><strong>Double ingot</strong><span>200 mB</span></div>
+          <div><strong>Sheet</strong><span>200 mB</span></div>
+          <div><strong>Double sheet</strong><span>400 mB</span></div>
+          <div><strong>Tiny ore</strong><span>10 mB*</span></div>
+          <div><strong>Small ore</strong><span>15 mB*</span></div>
+          <div><strong>Normal ore</strong><span>25 mB*</span></div>
+          <div><strong>Poor / rich ores</strong><span>Pack dependent*</span></div>
+        </div>
+        <p class="fine-print">*Ore yields vary by TFC version and modpack. The calculator only needs proportional amounts.</p>
+      </details>
+    </section>
+
+    <section class="panel result-panel">
+      <h2>Result</h2>
+      <div id="resultBadge" class="result-badge neutral">Enter metals to begin</div>
+      <div class="stats">
+        <div><span>Total</span><strong id="totalUnits">0</strong></div>
+        <div><span>Matching Alloy</span><strong id="matchingAlloy">None</strong></div>
+        <div><span>Status</span><strong id="statusText">Waiting</strong></div>
+      </div>
+      <div id="composition" class="composition"></div>
+      <div id="warnings" class="warnings"></div>
+    </section>
+
+    <section class="panel planner-panel">
+      <div class="panel-heading compact">
+        <div>
+          <h2>Alloy Planner</h2>
+          <p>Pick a target alloy and the app will calculate the smallest additions that can make your current mix valid.</p>
+        </div>
+      </div>
+      <label class="field">
+        <span>Target alloy</span>
+        <select id="targetAlloy"></select>
+      </label>
+      <label class="field">
+        <span>Planned batch size when starting empty</span>
+        <input id="plannedBatch" type="number" min="1" step="1" value="100" />
+      </label>
+      <div id="planOutput" class="plan-output"></div>
+    </section>
+
+    <section class="panel recipe-panel">
+      <h2>Recipe Reference</h2>
+      <div id="recipeCards" class="recipe-cards"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Static app for GitHub Pages. Ratio data is defined in <code>app.js</code> so you can adjust it for modpacks.</p>
+  </footer>
+
+  <template id="rowTemplate">
+    <div class="metal-row">
+      <select class="metal-select" aria-label="Metal"></select>
+      <input class="amount-input" type="number" min="0" step="0.01" placeholder="Amount" aria-label="Amount" />
+      <button class="remove-row" title="Remove row" aria-label="Remove row">×</button>
+    </div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
