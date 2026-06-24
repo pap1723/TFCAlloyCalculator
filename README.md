@@ -1,45 +1,76 @@
 # TerraFirmaCraft Alloy Calculator
 
-A static GitHub Pages app for calculating TerraFirmaCraft alloy percentages and planning additions to a vessel or crucible.
+A static TerraFirmaCraft alloy calculator that can be hosted directly on GitHub Pages. No backend, package manager, bundler, or build step is required.
+
+## Files
+
+- `index.html` - app layout
+- `styles.css` - responsive dark UI
+- `app.js` - alloy data, profile system, unit conversion, solvers, and local storage
 
 ## Features
 
-- Works on GitHub Pages with no build step.
-- Detects valid alloy results from the current mixture.
-- Shows percentage breakdowns and warnings for invalid mixes.
-- Includes an alloy planner that calculates the smallest additions needed to make the current mix valid for a target alloy.
-- Saves your current inputs in browser local storage.
-- Alloy ratios are easy to edit in `app.js`.
+- Current crucible/vessel metal input
+- Per-row unit conversion: mB, 10 mB unit, ingot, double ingot, sheet, double sheet, vessel
+- Alloy profile selector for TFC versions or modpacks
+- Import/export custom alloy profiles as JSON
+- Automatic alloy detection
+- Percentage breakdown bars
+- Capacity warnings for vessels/crucibles
+- “What can I make?” recovery mode
+- Smart correction suggestions for invalid mixes
+- Batch planner with valid ingredient ranges
+- Closest simple recipe solver using selectable granularity: 1 mB, 10 mB units, or whole ingots
+- Browser local storage for saved state and custom profiles
 
-## Included recipes
+## Hosting on GitHub Pages
 
-- Bronze
-- Bismuth Bronze
-- Black Bronze
-- Brass
-- Rose Gold
-- Sterling Silver
-- Weak Steel
-- Weak Blue Steel
-- Weak Red Steel
-
-## Deploy to GitHub Pages
-
-1. Create a new GitHub repository.
-2. Upload `index.html`, `styles.css`, `app.js`, and this `README.md` to the repository root.
-3. Open **Settings > Pages**.
-4. Under **Build and deployment**, choose **Deploy from a branch**.
+1. Create a GitHub repository.
+2. Upload `index.html`, `styles.css`, `app.js`, and `README.md` to the repository root.
+3. Go to **Settings > Pages**.
+4. Select **Deploy from a branch**.
 5. Select the `main` branch and `/root` folder.
-6. Save. GitHub will publish the site after the Pages build finishes.
+6. Save.
 
-## Customize recipes
+GitHub will provide a Pages URL after deployment.
 
-Open `app.js` and edit the `ALLOYS` array near the top of the file. Each ingredient uses `[minimumPercent, maximumPercent]`.
+## Editing built-in ratios
+
+Default alloy data is near the top of `app.js` in `DEFAULT_PROFILES`.
+
+Each alloy looks like this:
 
 ```js
 { name: 'Bronze', ingredients: { Copper: [88, 92], Tin: [8, 12] }, group: 'Primitive' }
 ```
 
+The two numbers are the minimum and maximum valid percentage for that ingredient.
+
+## Custom profile JSON format
+
+You can also export, edit, and import profiles in the app UI.
+
+```json
+{
+  "id": "my-modpack",
+  "name": "My Modpack",
+  "notes": "Custom ratios for my server",
+  "alloys": [
+    {
+      "name": "Bronze",
+      "group": "Primitive",
+      "ingredients": {
+        "Copper": [88, 92],
+        "Tin": [8, 12]
+      }
+    }
+  ]
+}
+```
+
+The validator checks that every alloy can plausibly add up to 100%.
+
 ## Notes
 
-Ore and item yields can vary by TerraFirmaCraft version or modpack. This calculator only needs proportional amounts, so any consistent unit works.
+- The default ratios are provided as editable defaults and may not match every TerraFirmaCraft version or modpack.
+- Ore yields vary by version and pack. The calculator works from molten metal amounts, so use the unit conversion that matches your setup.

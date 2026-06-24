@@ -1,33 +1,80 @@
 'use strict';
 
-// TerraFirmaCraft alloy data. Edit these recipes if a modpack changes ratios.
-const ALLOYS = [
-  { name: 'Bronze', ingredients: { Copper: [88, 92], Tin: [8, 12] }, group: 'Primitive' },
-  { name: 'Bismuth Bronze', ingredients: { Copper: [50, 65], Zinc: [20, 30], Bismuth: [10, 20] }, group: 'Primitive' },
-  { name: 'Black Bronze', ingredients: { Copper: [50, 70], Silver: [10, 25], Gold: [10, 25] }, group: 'Primitive' },
-  { name: 'Brass', ingredients: { Copper: [88, 92], Zinc: [8, 12] }, group: 'Utility' },
-  { name: 'Rose Gold', ingredients: { Copper: [15, 30], Gold: [70, 85] }, group: 'Utility' },
-  { name: 'Sterling Silver', ingredients: { Copper: [20, 40], Silver: [60, 80] }, group: 'Utility' },
-  { name: 'Weak Steel', ingredients: { Steel: [50, 70], Nickel: [15, 25], 'Black Bronze': [15, 25] }, group: 'Steel Path' },
-  { name: 'Weak Blue Steel', ingredients: { 'Black Steel': [50, 55], Steel: [20, 25], 'Bismuth Bronze': [10, 15], 'Sterling Silver': [10, 15] }, group: 'Steel Path' },
-  { name: 'Weak Red Steel', ingredients: { 'Black Steel': [50, 55], Steel: [20, 25], Brass: [10, 15], 'Rose Gold': [10, 15] }, group: 'Steel Path' },
+// Edit these defaults for your server/modpack. A profile can also be imported/exported in the UI.
+const UNIT_DEFS = [
+  { id: 'mb', label: 'mB', mb: 1 },
+  { id: 'unit10', label: '10 mB unit', mb: 10 },
+  { id: 'ingot', label: 'Ingot', mb: 100 },
+  { id: 'double_ingot', label: 'Double ingot', mb: 200 },
+  { id: 'sheet', label: 'Sheet', mb: 200 },
+  { id: 'double_sheet', label: 'Double sheet', mb: 400 },
+  { id: 'vessel', label: 'Vessel', mb: 400 },
 ];
 
-const METALS = Array.from(new Set(ALLOYS.flatMap(a => Object.keys(a.ingredients)))).sort((a, b) => a.localeCompare(b));
+const DEFAULT_PROFILES = [
+  {
+    id: 'tfc-default',
+    name: 'TFC Default',
+    notes: 'Default TerraFirmaCraft alloy ratios. Modpacks can override these values.',
+    alloys: [
+      { name: 'Bronze', ingredients: { Copper: [88, 92], Tin: [8, 12] }, group: 'Primitive' },
+      { name: 'Bismuth Bronze', ingredients: { Copper: [50, 65], Zinc: [20, 30], Bismuth: [10, 20] }, group: 'Primitive' },
+      { name: 'Black Bronze', ingredients: { Copper: [50, 70], Silver: [10, 25], Gold: [10, 25] }, group: 'Primitive' },
+      { name: 'Brass', ingredients: { Copper: [88, 92], Zinc: [8, 12] }, group: 'Utility' },
+      { name: 'Rose Gold', ingredients: { Copper: [15, 30], Gold: [70, 85] }, group: 'Utility' },
+      { name: 'Sterling Silver', ingredients: { Copper: [20, 40], Silver: [60, 80] }, group: 'Utility' },
+      { name: 'Weak Steel', ingredients: { Steel: [50, 70], Nickel: [15, 25], 'Black Bronze': [15, 25] }, group: 'Steel Path' },
+      { name: 'Weak Blue Steel', ingredients: { 'Black Steel': [50, 55], Steel: [20, 25], 'Bismuth Bronze': [10, 15], 'Sterling Silver': [10, 15] }, group: 'Steel Path' },
+      { name: 'Weak Red Steel', ingredients: { 'Black Steel': [50, 55], Steel: [20, 25], Brass: [10, 15], 'Rose Gold': [10, 15] }, group: 'Steel Path' },
+    ],
+  },
+];
 
-const rowsEl = document.querySelector('#rows');
-const rowTemplate = document.querySelector('#rowTemplate');
-const resultBadge = document.querySelector('#resultBadge');
-const totalUnitsEl = document.querySelector('#totalUnits');
-const matchingAlloyEl = document.querySelector('#matchingAlloy');
-const statusTextEl = document.querySelector('#statusText');
-const compositionEl = document.querySelector('#composition');
-const warningsEl = document.querySelector('#warnings');
-const targetAlloyEl = document.querySelector('#targetAlloy');
-const plannedBatchEl = document.querySelector('#plannedBatch');
-const planOutputEl = document.querySelector('#planOutput');
-const recipeCardsEl = document.querySelector('#recipeCards');
+let profiles = loadProfiles();
+let activeProfileId = localStorage.getItem('tfcActiveProfile') || profiles[0].id;
 let activeAmountInput = null;
+
+const els = {
+  rows: document.querySelector('#rows'),
+  rowTemplate: document.querySelector('#rowTemplate'),
+  resultBadge: document.querySelector('#resultBadge'),
+  totalUnits: document.querySelector('#totalUnits'),
+  capacityStatus: document.querySelector('#capacityStatus'),
+  matchingAlloy: document.querySelector('#matchingAlloy'),
+  statusText: document.querySelector('#statusText'),
+  composition: document.querySelector('#composition'),
+  warnings: document.querySelector('#warnings'),
+  targetAlloy: document.querySelector('#targetAlloy'),
+  plannedBatch: document.querySelector('#plannedBatch'),
+  plannedUnit: document.querySelector('#plannedUnit'),
+  granularity: document.querySelector('#granularity'),
+  planOutput: document.querySelector('#planOutput'),
+  possibleOutput: document.querySelector('#possibleOutput'),
+  correctionOutput: document.querySelector('#correctionOutput'),
+  recipeCards: document.querySelector('#recipeCards'),
+  profileSelect: document.querySelector('#profileSelect'),
+  capacityAmount: document.querySelector('#capacityAmount'),
+  capacityUnit: document.querySelector('#capacityUnit'),
+  unitReference: document.querySelector('#unitReference'),
+  profileJson: document.querySelector('#profileJson'),
+  profileMessage: document.querySelector('#profileMessage'),
+};
+
+function activeProfile() {
+  return profiles.find(p => p.id === activeProfileId) || profiles[0];
+}
+
+function alloys() {
+  return activeProfile().alloys;
+}
+
+function metals() {
+  return Array.from(new Set(alloys().flatMap(a => Object.keys(a.ingredients)))).sort((a, b) => a.localeCompare(b));
+}
+
+function unitById(id) {
+  return UNIT_DEFS.find(u => u.id === id) || UNIT_DEFS[0];
+}
 
 function fmt(num, digits = 2) {
   if (!Number.isFinite(num)) return '0';
@@ -35,37 +82,88 @@ function fmt(num, digits = 2) {
   return rounded.toLocaleString(undefined, { maximumFractionDigits: digits });
 }
 
-function populateMetalSelect(select) {
-  select.innerHTML = METALS.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+function fmtMb(mb) {
+  return `${fmt(mb)} mB`;
 }
 
-function addRow(metal = 'Copper', amount = '') {
-  const node = rowTemplate.content.firstElementChild.cloneNode(true);
+function escapeHtml(value) {
+  return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[char]));
+}
+
+function slugify(value) {
+  return String(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'profile';
+}
+
+function populateUnitSelect(select, includeMbOnly = false) {
+  const units = includeMbOnly ? UNIT_DEFS.filter(u => ['mb', 'unit10', 'ingot', 'vessel'].includes(u.id)) : UNIT_DEFS;
+  select.innerHTML = units.map(u => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.label)}</option>`).join('');
+}
+
+function populateMetalSelect(select, selected) {
+  const list = metals();
+  select.innerHTML = list.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+  if (selected && list.includes(selected)) select.value = selected;
+}
+
+function populateProfileSelect() {
+  els.profileSelect.innerHTML = profiles.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
+  if (!profiles.some(p => p.id === activeProfileId)) activeProfileId = profiles[0].id;
+  els.profileSelect.value = activeProfileId;
+}
+
+function populateTargets(selected) {
+  const currentAlloys = alloys();
+  els.targetAlloy.innerHTML = currentAlloys.map(a => `<option value="${escapeHtml(a.name)}">${escapeHtml(a.name)} (${escapeHtml(a.group || 'Alloy')})</option>`).join('');
+  if (selected && currentAlloys.some(a => a.name === selected)) els.targetAlloy.value = selected;
+}
+
+function renderUnitReference() {
+  els.unitReference.innerHTML = UNIT_DEFS.map(u => `<div><strong>${escapeHtml(u.label)}</strong><span>${fmtMb(u.mb)}</span></div>`).join('');
+}
+
+function addRow(metal = 'Copper', amount = '', unit = 'mb') {
+  const node = els.rowTemplate.content.firstElementChild.cloneNode(true);
   const select = node.querySelector('.metal-select');
   const input = node.querySelector('.amount-input');
-  populateMetalSelect(select);
-  select.value = metal;
+  const unitSelect = node.querySelector('.unit-select');
+  populateMetalSelect(select, metal);
+  populateUnitSelect(unitSelect);
+  unitSelect.value = unitById(unit).id;
   input.value = amount;
   input.addEventListener('focus', () => { activeAmountInput = input; });
   input.addEventListener('input', update);
   select.addEventListener('change', update);
+  unitSelect.addEventListener('change', update);
   node.querySelector('.remove-row').addEventListener('click', () => {
     node.remove();
-    if (!rowsEl.children.length) addRow();
+    if (!els.rows.children.length) addRow();
     update();
   });
-  rowsEl.appendChild(node);
+  els.rows.appendChild(node);
   update();
+}
+
+function refreshRowMetalOptions() {
+  [...els.rows.querySelectorAll('.metal-row')].forEach(row => {
+    const select = row.querySelector('.metal-select');
+    const old = select.value;
+    populateMetalSelect(select, old);
+  });
+}
+
+function rowAmountMb(row) {
+  const amount = Number(row.querySelector('.amount-input').value);
+  const unitId = row.querySelector('.unit-select').value;
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  return amount * unitById(unitId).mb;
 }
 
 function getMixture() {
   const mix = {};
-  [...rowsEl.querySelectorAll('.metal-row')].forEach(row => {
+  [...els.rows.querySelectorAll('.metal-row')].forEach(row => {
     const metal = row.querySelector('.metal-select').value;
-    const amount = Number(row.querySelector('.amount-input').value);
-    if (metal && Number.isFinite(amount) && amount > 0) {
-      mix[metal] = (mix[metal] || 0) + amount;
-    }
+    const mb = rowAmountMb(row);
+    if (metal && mb > 0) mix[metal] = (mix[metal] || 0) + mb;
   });
   return mix;
 }
@@ -77,10 +175,19 @@ function totalOf(mix) {
 function percentages(mix) {
   const total = totalOf(mix);
   const out = {};
-  Object.entries(mix).forEach(([metal, amount]) => {
-    out[metal] = total > 0 ? amount / total * 100 : 0;
-  });
+  Object.entries(mix).forEach(([metal, amount]) => { out[metal] = total > 0 ? amount / total * 100 : 0; });
   return out;
+}
+
+function capacityMb() {
+  const amount = Number(els.capacityAmount.value);
+  if (!Number.isFinite(amount) || amount <= 0) return Infinity;
+  return amount * unitById(els.capacityUnit.value).mb;
+}
+
+function targetBatchMb() {
+  const amount = Math.max(1, Number(els.plannedBatch.value) || 1);
+  return amount * unitById(els.plannedUnit.value).mb;
 }
 
 function matchesRecipe(mix, alloy) {
@@ -98,91 +205,186 @@ function matchesRecipe(mix, alloy) {
 }
 
 function findMatches(mix) {
-  return ALLOYS.filter(alloy => matchesRecipe(mix, alloy));
+  return alloys().filter(alloy => matchesRecipe(mix, alloy));
 }
 
 function update() {
   const mix = getMixture();
   const total = totalOf(mix);
   const matches = findMatches(mix);
-  totalUnitsEl.textContent = fmt(total);
-  matchingAlloyEl.textContent = matches.length ? matches.map(m => m.name).join(', ') : 'None';
-  compositionEl.innerHTML = renderComposition(mix);
-  warningsEl.innerHTML = renderWarnings(mix, matches);
+  const cap = capacityMb();
+
+  els.totalUnits.textContent = fmtMb(total);
+  els.capacityStatus.textContent = Number.isFinite(cap) ? `${fmtMb(Math.max(0, cap - total))} free` : 'No limit';
+  els.matchingAlloy.textContent = matches.length ? matches.map(m => m.name).join(', ') : 'None';
+  els.composition.innerHTML = renderComposition(mix);
+  els.warnings.innerHTML = renderWarnings(mix, matches, cap);
 
   if (total <= 0) {
     setBadge('Enter metals to begin', 'neutral');
-    statusTextEl.textContent = 'Waiting';
+    els.statusText.textContent = 'Waiting';
+  } else if (Number.isFinite(cap) && total > cap) {
+    setBadge('Over capacity', 'warn');
+    els.statusText.textContent = 'Too full';
   } else if (matches.length) {
     setBadge(`Valid ${matches[0].name}`, 'good');
-    statusTextEl.textContent = matches.length > 1 ? 'Multiple matches' : 'Valid';
+    els.statusText.textContent = matches.length > 1 ? 'Multiple matches' : 'Valid';
   } else {
     setBadge('No valid alloy', 'bad');
-    statusTextEl.textContent = 'Unknown metal risk';
+    els.statusText.textContent = 'Unknown metal risk';
   }
 
+  renderPossible();
+  renderCorrections();
   renderPlan();
   saveState();
 }
 
 function setBadge(text, cls) {
-  resultBadge.textContent = text;
-  resultBadge.className = `result-badge ${cls}`;
+  els.resultBadge.textContent = text;
+  els.resultBadge.className = `result-badge ${cls}`;
 }
 
 function renderComposition(mix) {
   const total = totalOf(mix);
   if (total <= 0) return '<p class="fine-print">Add metals to see percentage composition.</p>';
-  return Object.entries(percentages(mix))
-    .sort((a, b) => b[1] - a[1])
-    .map(([metal, pct]) => {
-      const amount = mix[metal];
-      return `<div class="bar-row">
-        <div class="bar-label"><strong>${escapeHtml(metal)}</strong><span>${fmt(amount)} units · ${fmt(pct)}%</span></div>
-        <div class="bar-track"><div class="bar-fill" style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>
-      </div>`;
-    }).join('');
+  return Object.entries(percentages(mix)).sort((a, b) => b[1] - a[1]).map(([metal, pct]) => {
+    const amount = mix[metal];
+    return `<div class="bar-row">
+      <div class="bar-label"><strong>${escapeHtml(metal)}</strong><span>${fmtMb(amount)} · ${fmt(pct)}%</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>
+    </div>`;
+  }).join('');
 }
 
-function renderWarnings(mix, matches) {
+function renderWarnings(mix, matches, cap) {
   const total = totalOf(mix);
+  const parts = [];
   if (total <= 0) return '';
+  if (Number.isFinite(cap) && total > cap) {
+    parts.push(`<div class="warning">Current mix is ${fmtMb(total - cap)} over the selected capacity.</div>`);
+  }
   if (matches.length) {
-    const recipeText = recipeToText(matches[0]);
-    return `<div class="note">This mix is inside the valid range for <strong>${escapeHtml(matches[0].name)}</strong>: ${recipeText}.</div>`;
+    parts.push(`<div class="note">This mix is inside the valid range for <strong>${escapeHtml(matches[0].name)}</strong>: ${recipeToText(matches[0])}.</div>`);
+  } else {
+    const possible = alloys().filter(alloy => Object.keys(mix).every(m => Object.keys(alloy.ingredients).includes(m)));
+    if (!possible.length) parts.push('<div class="warning">Your mix includes metals that do not belong together in any built-in recipe for this profile.</div>');
+    else parts.push(`<div class="warning">These metals can form ${possible.map(a => escapeHtml(a.name)).join(' or ')}, but the percentages are outside the valid range.</div>`);
   }
-  const possible = ALLOYS.filter(alloy => Object.keys(mix).every(m => Object.keys(alloy.ingredients).includes(m)));
+  return parts.join('');
+}
+
+function renderPossible() {
+  const mix = getMixture();
+  const total = totalOf(mix);
+  if (total <= 0) {
+    els.possibleOutput.innerHTML = `<div class="mini-card"><h3>Start with a metal</h3><p>Add a current mix to see which alloys are still possible.</p></div>`;
+    return;
+  }
+  const cap = capacityMb();
+  const possible = alloys().map(alloy => ({ alloy, plan: calculatePlan(mix, alloy, Math.max(targetBatchMb(), total)) }))
+    .filter(item => item.plan.ok)
+    .sort((a, b) => a.plan.finalTotal - b.plan.finalTotal);
+
   if (!possible.length) {
-    return '<div class="warning">Your mix includes metals that do not belong together in any built-in recipe.</div>';
+    els.possibleOutput.innerHTML = `<div class="warning">No built-in alloy can be made from this exact set of metals without removing at least one metal.</div>`;
+    return;
   }
-  return `<div class="warning">These metals can form ${possible.map(a => escapeHtml(a.name)).join(' or ')}, but the percentages are outside the valid range.</div>`;
+
+  els.possibleOutput.innerHTML = possible.slice(0, 8).map(({ alloy, plan }) => {
+    const additions = Object.entries(plan.additions).filter(([, amount]) => amount > 1e-6);
+    const overCap = Number.isFinite(cap) && plan.finalTotal > cap;
+    const additionText = additions.length
+      ? additions.map(([m, amount]) => `<li>${escapeHtml(m)}: <strong>${fmtMb(amount)}</strong></li>`).join('')
+      : '<li>No additions needed.</li>';
+    return `<div class="mini-card">
+      <h3>${escapeHtml(alloy.name)}${overCap ? ' <span class="fine-print">(over capacity)</span>' : ''}</h3>
+      <p>Smallest feasible final mix: <strong>${fmtMb(plan.finalTotal)}</strong>. Final composition: ${compositionText(plan.finalMix)}.</p>
+      <ul class="plan-list">${additionText}</ul>
+    </div>`;
+  }).join('');
+}
+
+function renderCorrections() {
+  const mix = getMixture();
+  const total = totalOf(mix);
+  const matches = findMatches(mix);
+  if (total <= 0) {
+    els.correctionOutput.innerHTML = `<div class="mini-card"><h3>No correction needed yet</h3><p>Enter a mix first.</p></div>`;
+    return;
+  }
+  if (matches.length) {
+    els.correctionOutput.innerHTML = `<div class="note">No correction needed. Current mix is valid for ${matches.map(m => `<strong>${escapeHtml(m.name)}</strong>`).join(', ')}.</div>`;
+    return;
+  }
+
+  const sameMetalRecipes = alloys().filter(alloy => Object.keys(mix).every(m => Object.keys(alloy.ingredients).includes(m)));
+  const cards = [];
+  if (!sameMetalRecipes.length) {
+    const offending = Object.keys(mix).filter(m => !alloys().some(a => Object.keys(a.ingredients).includes(m)));
+    const allMixMetals = Object.keys(mix);
+    cards.push(`<div class="warning"><strong>Incompatible ingredients.</strong> This exact combination does not fit any recipe. ${offending.length ? `Unknown-to-profile metal(s): ${offending.map(escapeHtml).join(', ')}.` : 'At least one metal must be removed or the target changed.'}</div>`);
+    const removableHints = alloys().filter(a => Object.keys(a.ingredients).some(m => allMixMetals.includes(m))).slice(0, 5);
+    removableHints.forEach(a => {
+      const forbidden = allMixMetals.filter(m => !Object.keys(a.ingredients).includes(m));
+      cards.push(`<div class="mini-card"><h3>Pivot to ${escapeHtml(a.name)}</h3><p>Remove or avoid: <strong>${forbidden.map(escapeHtml).join(', ') || 'nothing'}</strong>. Then use the planner for additions.</p></div>`);
+    });
+  } else {
+    const pcts = percentages(mix);
+    sameMetalRecipes.forEach(alloy => {
+      const issues = Object.entries(alloy.ingredients).map(([metal, [min, max]]) => {
+        const pct = pcts[metal] || 0;
+        if (pct < min) return `${metal} is low (${fmt(pct)}%, needs ${min}-${max}%)`;
+        if (pct > max) return `${metal} is high (${fmt(pct)}%, needs ${min}-${max}%)`;
+        return null;
+      }).filter(Boolean);
+      const plan = calculatePlan(mix, alloy, Math.max(total, targetBatchMb()));
+      const additions = plan.ok ? Object.entries(plan.additions).filter(([, amount]) => amount > 1e-6) : [];
+      cards.push(`<div class="mini-card">
+        <h3>Fix toward ${escapeHtml(alloy.name)}</h3>
+        <p>${issues.map(escapeHtml).join('; ') || 'Percentages are close, but at least one required metal is missing.'}</p>
+        ${additions.length ? `<p>Recovery additions:</p><ul class="plan-list">${additions.map(([m, amount]) => `<li>${escapeHtml(m)}: <strong>${fmtMb(amount)}</strong></li>`).join('')}</ul>` : '<p>No additive-only recovery found.</p>'}
+      </div>`);
+    });
+  }
+  els.correctionOutput.innerHTML = cards.join('');
 }
 
 function renderPlan() {
-  const target = ALLOYS.find(a => a.name === targetAlloyEl.value) || ALLOYS[0];
-  const mix = getMixture();
-  const plan = calculatePlan(mix, target, Number(plannedBatchEl.value) || 100);
-  if (!plan.ok) {
-    planOutputEl.innerHTML = `<div class="warning">${escapeHtml(plan.message)}</div>`;
+  const target = alloys().find(a => a.name === els.targetAlloy.value) || alloys()[0];
+  if (!target) {
+    els.planOutput.innerHTML = '<div class="warning">No alloys are defined in this profile.</div>';
     return;
   }
-  const additions = Object.entries(plan.additions).filter(([, amount]) => amount > 1e-7);
-  if (!additions.length) {
-    planOutputEl.innerHTML = `<div class="note">Your current mix already satisfies <strong>${escapeHtml(target.name)}</strong>.</div>`;
-    return;
-  }
-  planOutputEl.innerHTML = `<div class="note"><strong>Add these metals</strong> to reach a valid ${escapeHtml(target.name)} mix at about ${fmt(plan.finalTotal)} total units:</div>
-    <ul class="plan-list">${additions.map(([metal, amount]) => `<li>${escapeHtml(metal)}: <strong>${fmt(amount)}</strong> units</li>`).join('')}</ul>
-    <p class="fine-print">Final target percentages: ${Object.entries(percentages(plan.finalMix)).map(([m, p]) => `${escapeHtml(m)} ${fmt(p)}%`).join(', ')}.</p>`;
+  const desiredMb = targetBatchMb();
+  const granularity = Number(els.granularity.value) || 1;
+  const cap = capacityMb();
+  const rangeRows = Object.entries(target.ingredients).map(([metal, [min, max]]) => {
+    const low = desiredMb * min / 100;
+    const high = desiredMb * max / 100;
+    return `<tr><td>${escapeHtml(metal)}</td><td>${min}-${max}%</td><td>${fmtMb(low)} - ${fmtMb(high)}</td></tr>`;
+  }).join('');
+  const recipe = closestRecipe(target, desiredMb, granularity);
+  const currentPlan = calculatePlan(getMixture(), target, desiredMb);
+
+  const recipeHtml = recipe.ok
+    ? `<div class="note"><strong>Closest simple recipe</strong> for ${fmtMb(recipe.total)} using ${fmtMb(granularity)} steps:</div>
+       <ul class="plan-list">${Object.entries(recipe.mix).map(([m, amount]) => `<li>${escapeHtml(m)}: <strong>${fmtMb(amount)}</strong> (${asCommonUnits(amount)})</li>`).join('')}</ul>
+       <p class="fine-print">Composition: ${compositionText(recipe.mix)}. Score favors midpoint percentages and fewer pieces.</p>`
+    : `<div class="warning">${escapeHtml(recipe.message)}</div>`;
+
+  const currentHtml = currentPlan.ok
+    ? `<div class="mini-card"><h3>From current mix</h3><p>Smallest additive plan ends at <strong>${fmtMb(currentPlan.finalTotal)}</strong>${Number.isFinite(cap) && currentPlan.finalTotal > cap ? ' and exceeds the selected capacity' : ''}.</p><ul class="plan-list">${Object.entries(currentPlan.additions).filter(([, amount]) => amount > 1e-6).map(([m, amount]) => `<li>${escapeHtml(m)}: <strong>${fmtMb(amount)}</strong></li>`).join('') || '<li>No additions needed.</li>'}</ul></div>`
+    : `<div class="warning">From current mix: ${escapeHtml(currentPlan.message)}</div>`;
+
+  els.planOutput.innerHTML = `<table class="range-table"><thead><tr><th>Metal</th><th>Valid %</th><th>Valid amount for ${fmtMb(desiredMb)}</th></tr></thead><tbody>${rangeRows}</tbody></table>${recipeHtml}${currentHtml}`;
 }
 
 function calculatePlan(currentMix, alloy, emptyBatchSize) {
   const ingredients = Object.keys(alloy.ingredients);
   const currentTotal = totalOf(currentMix);
   const forbidden = Object.keys(currentMix).filter(m => currentMix[m] > 0 && !ingredients.includes(m));
-  if (forbidden.length) {
-    return { ok: false, message: `${forbidden.join(', ')} cannot be part of ${alloy.name}. Remove it or pick a different target alloy.` };
-  }
+  if (forbidden.length) return { ok: false, message: `${forbidden.join(', ')} cannot be part of ${alloy.name}. Remove it or pick a different target alloy.` };
 
   if (currentTotal <= 0) {
     const finalMix = {};
@@ -199,15 +401,21 @@ function calculatePlan(currentMix, alloy, emptyBatchSize) {
     const [, max] = alloy.ingredients[m];
     low = Math.max(low, amount / (max / 100));
   });
-  let high = low;
+  let high = Math.max(low, emptyBatchSize);
   let feasible = null;
-  for (let i = 0; i < 80; i++) {
+  for (let i = 0; i < 100; i++) {
     const candidate = buildFeasibleMix(currentMix, alloy, high);
     if (candidate) { feasible = candidate; break; }
-    high *= 1.5;
+    high *= 1.35;
   }
-  if (!feasible) return { ok: false, message: `No feasible addition plan found for ${alloy.name}.` };
+  if (!feasible) return { ok: false, message: `No additive recovery plan found for ${alloy.name}.` };
 
+  low = Math.max(currentTotal, 1);
+  ingredients.forEach(m => {
+    const amount = currentMix[m] || 0;
+    const [, max] = alloy.ingredients[m];
+    low = Math.max(low, amount / (max / 100));
+  });
   for (let i = 0; i < 90; i++) {
     const mid = (low + high) / 2;
     const candidate = buildFeasibleMix(currentMix, alloy, mid);
@@ -216,9 +424,7 @@ function calculatePlan(currentMix, alloy, emptyBatchSize) {
   }
 
   const additions = {};
-  Object.entries(feasible).forEach(([metal, amount]) => {
-    additions[metal] = Math.max(0, amount - (currentMix[metal] || 0));
-  });
+  Object.entries(feasible).forEach(([metal, amount]) => { additions[metal] = Math.max(0, amount - (currentMix[metal] || 0)); });
   return { ok: true, additions, finalMix: feasible, finalTotal: totalOf(feasible) };
 }
 
@@ -228,7 +434,6 @@ function buildFeasibleMix(currentMix, alloy, total) {
   const upper = {};
   let lowerSum = 0;
   let upperSum = 0;
-
   ingredients.forEach(m => {
     const [min, max] = alloy.ingredients[m];
     lower[m] = Math.max(currentMix[m] || 0, total * min / 100);
@@ -236,9 +441,7 @@ function buildFeasibleMix(currentMix, alloy, total) {
     lowerSum += lower[m];
     upperSum += upper[m];
   });
-
   if (lowerSum - total > 1e-7 || total - upperSum > 1e-7) return null;
-
   const finalMix = { ...lower };
   let remaining = total - lowerSum;
   for (const m of ingredients) {
@@ -251,89 +454,295 @@ function buildFeasibleMix(currentMix, alloy, total) {
   return remaining <= 1e-5 ? finalMix : null;
 }
 
+function closestRecipe(alloy, desiredMb, granularity) {
+  const ingredients = Object.keys(alloy.ingredients);
+  const roundedTotal = Math.max(granularity, Math.round(desiredMb / granularity) * granularity);
+  if (roundedTotal / granularity > 2000) {
+    return { ok: false, message: 'Batch is too large for discrete search at this granularity. Use a larger recipe step.' };
+  }
+  const ranges = ingredients.map(m => {
+    const [min, max] = alloy.ingredients[m];
+    return {
+      metal: m,
+      min: Math.ceil((roundedTotal * min / 100) / granularity) * granularity,
+      max: Math.floor((roundedTotal * max / 100) / granularity) * granularity,
+      mid: roundedTotal * ((min + max) / 2) / 100,
+    };
+  });
+  if (ranges.some(r => r.min > r.max)) return { ok: false, message: `No exact ${fmtMb(granularity)}-step recipe fits ${fmtMb(roundedTotal)}. Try smaller steps or a larger batch.` };
+
+  let best = null;
+  function recurse(index, remaining, mix) {
+    if (index === ranges.length - 1) {
+      const r = ranges[index];
+      if (remaining < r.min - 1e-9 || remaining > r.max + 1e-9) return;
+      const candidate = { ...mix, [r.metal]: remaining };
+      scoreCandidate(candidate);
+      return;
+    }
+    const r = ranges[index];
+    const minRest = ranges.slice(index + 1).reduce((s, x) => s + x.min, 0);
+    const maxRest = ranges.slice(index + 1).reduce((s, x) => s + x.max, 0);
+    for (let amt = r.min; amt <= r.max + 1e-9; amt += granularity) {
+      const rest = remaining - amt;
+      if (rest < minRest - 1e-9 || rest > maxRest + 1e-9) continue;
+      recurse(index + 1, rest, { ...mix, [r.metal]: amt });
+    }
+  }
+  function scoreCandidate(mix) {
+    const midpointPenalty = ranges.reduce((s, r) => s + Math.abs((mix[r.metal] || 0) - r.mid), 0);
+    const pieces = Object.values(mix).reduce((s, amount) => s + Math.ceil(amount / granularity), 0);
+    const score = midpointPenalty * 1000 + pieces;
+    if (!best || score < best.score) best = { score, mix };
+  }
+  recurse(0, roundedTotal, {});
+  return best ? { ok: true, mix: best.mix, total: roundedTotal } : { ok: false, message: 'No valid simple recipe found. Try a smaller step size.' };
+}
+
 function recipeToText(alloy) {
-  return Object.entries(alloy.ingredients)
-    .map(([metal, [min, max]]) => `${escapeHtml(metal)} ${min}-${max}%`)
-    .join(', ');
+  return Object.entries(alloy.ingredients).map(([metal, [min, max]]) => `${escapeHtml(metal)} ${min}-${max}%`).join(', ');
+}
+
+function compositionText(mix) {
+  return Object.entries(percentages(mix)).map(([m, p]) => `${escapeHtml(m)} ${fmt(p)}%`).join(', ');
+}
+
+function asCommonUnits(mb) {
+  if (Math.abs(mb % 100) < 1e-8) return `${fmt(mb / 100)} ingot${mb === 100 ? '' : 's'}`;
+  if (Math.abs(mb % 10) < 1e-8) return `${fmt(mb / 10)} × 10 mB units`;
+  return `${fmt(mb)} mB`;
 }
 
 function renderRecipes() {
-  recipeCardsEl.innerHTML = ALLOYS.map(alloy => `<article class="recipe-card">
+  els.recipeCards.innerHTML = alloys().map(alloy => `<article class="recipe-card">
     <h3>${escapeHtml(alloy.name)}</h3>
     <ul>${Object.entries(alloy.ingredients).map(([metal, [min, max]]) => `<li>${escapeHtml(metal)}: ${min}-${max}%</li>`).join('')}</ul>
   </article>`).join('');
 }
 
-function populateTargets() {
-  targetAlloyEl.innerHTML = ALLOYS.map(a => `<option value="${escapeHtml(a.name)}">${escapeHtml(a.name)} (${escapeHtml(a.group)})</option>`).join('');
+function profileForExport() {
+  const p = activeProfile();
+  return { id: p.id, name: p.name, notes: p.notes || '', alloys: p.alloys };
+}
+
+function updateProfileJsonBox() {
+  els.profileJson.value = JSON.stringify(profileForExport(), null, 2);
+}
+
+function validateProfile(profile) {
+  if (!profile || typeof profile !== 'object') throw new Error('Profile JSON must be an object.');
+  if (!Array.isArray(profile.alloys) || !profile.alloys.length) throw new Error('Profile must include a non-empty alloys array.');
+  profile.alloys.forEach((alloy, index) => {
+    if (!alloy.name || typeof alloy.name !== 'string') throw new Error(`Alloy at index ${index} needs a name.`);
+    if (!alloy.ingredients || typeof alloy.ingredients !== 'object') throw new Error(`${alloy.name} needs ingredients.`);
+    let minSum = 0;
+    let maxSum = 0;
+    Object.entries(alloy.ingredients).forEach(([metal, range]) => {
+      if (!metal || !Array.isArray(range) || range.length !== 2) throw new Error(`${alloy.name} has an invalid range.`);
+      const [min, max] = range.map(Number);
+      if (!Number.isFinite(min) || !Number.isFinite(max) || min < 0 || max > 100 || min > max) throw new Error(`${alloy.name} has an invalid range for ${metal}.`);
+      minSum += min;
+      maxSum += max;
+    });
+    if (minSum > 100 + 1e-9 || maxSum < 100 - 1e-9) throw new Error(`${alloy.name} ranges cannot add up to 100%.`);
+  });
+  return {
+    id: slugify(profile.id || profile.name || `custom-${Date.now()}`),
+    name: String(profile.name || profile.id || 'Custom Profile'),
+    notes: String(profile.notes || ''),
+    alloys: profile.alloys.map(a => ({ name: a.name, group: a.group || 'Custom', ingredients: a.ingredients })),
+  };
+}
+
+function applyProfile(profile, makeActive = true) {
+  const valid = validateProfile(profile);
+  let id = valid.id;
+  const existingIndex = profiles.findIndex(p => p.id === id);
+  if (existingIndex >= 0) profiles[existingIndex] = valid;
+  else profiles.push(valid);
+  if (makeActive) activeProfileId = id;
+  persistProfiles();
+  rebuildForProfile();
+  showProfileMessage(`Applied profile: ${valid.name}`, 'note');
+}
+
+function showProfileMessage(message, cls = 'note') {
+  els.profileMessage.innerHTML = `<div class="${cls}">${escapeHtml(message)}</div>`;
+}
+
+function cloneCurrentProfile() {
+  const p = profileForExport();
+  p.id = `${slugify(p.name)}-custom-${Date.now()}`;
+  p.name = `${p.name} Custom`;
+  applyProfile(p);
+}
+
+function exportProfileToClipboard() {
+  updateProfileJsonBox();
+  navigator.clipboard?.writeText(els.profileJson.value);
+  showProfileMessage('Profile JSON copied to the textbox and clipboard.', 'note');
+}
+
+function downloadProfile() {
+  updateProfileJsonBox();
+  const blob = new Blob([els.profileJson.value], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${activeProfile().id}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importProfileFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try { applyProfile(JSON.parse(String(reader.result))); }
+    catch (err) { showProfileMessage(err.message || 'Could not import profile.', 'warning'); }
+  };
+  reader.readAsText(file);
+}
+
+function loadProfiles() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('tfcProfiles') || 'null');
+    if (Array.isArray(saved) && saved.length) return saved;
+  } catch (_) {}
+  return structuredClone(DEFAULT_PROFILES);
+}
+
+function persistProfiles() {
+  localStorage.setItem('tfcProfiles', JSON.stringify(profiles));
+  localStorage.setItem('tfcActiveProfile', activeProfileId);
 }
 
 function saveState() {
-  const rows = [...rowsEl.querySelectorAll('.metal-row')].map(row => ({
+  const rows = [...els.rows.querySelectorAll('.metal-row')].map(row => ({
     metal: row.querySelector('.metal-select').value,
     amount: row.querySelector('.amount-input').value,
+    unit: row.querySelector('.unit-select').value,
   }));
-  localStorage.setItem('tfcAlloyState', JSON.stringify({ rows, target: targetAlloyEl.value, batch: plannedBatchEl.value }));
+  localStorage.setItem('tfcAlloyState', JSON.stringify({
+    rows,
+    target: els.targetAlloy.value,
+    batch: els.plannedBatch.value,
+    plannedUnit: els.plannedUnit.value,
+    granularity: els.granularity.value,
+    capacityAmount: els.capacityAmount.value,
+    capacityUnit: els.capacityUnit.value,
+    profileId: activeProfileId,
+  }));
 }
 
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem('tfcAlloyState') || 'null');
-    if (saved?.rows?.length) {
-      saved.rows.forEach(r => addRow(r.metal, r.amount));
-      targetAlloyEl.value = saved.target || 'Bronze';
-      plannedBatchEl.value = saved.batch || 100;
+    if (saved) {
+      activeProfileId = saved.profileId || activeProfileId;
+      rebuildForProfile(false);
+      els.capacityAmount.value = saved.capacityAmount || 3000;
+      els.capacityUnit.value = saved.capacityUnit || 'mb';
+      els.plannedBatch.value = saved.batch || 400;
+      els.plannedUnit.value = saved.plannedUnit || 'mb';
+      els.granularity.value = saved.granularity || '10';
+      if (saved.rows?.length) {
+        els.rows.innerHTML = '';
+        saved.rows.forEach(r => addRow(r.metal, r.amount, r.unit || 'mb'));
+      }
+      if (saved.target) populateTargets(saved.target);
       update();
       return;
     }
   } catch (_) {}
-  addRow('Copper', 90);
-  addRow('Tin', 10);
+  addRow('Copper', 360, 'mb');
+  addRow('Tin', 40, 'mb');
 }
 
 function reset() {
-  rowsEl.innerHTML = '';
+  els.rows.innerHTML = '';
   localStorage.removeItem('tfcAlloyState');
-  addRow('Copper', '');
-  addRow('Tin', '');
-  targetAlloyEl.value = 'Bronze';
-  plannedBatchEl.value = 100;
+  els.capacityAmount.value = 3000;
+  els.capacityUnit.value = 'mb';
+  els.plannedBatch.value = 400;
+  els.plannedUnit.value = 'mb';
+  els.granularity.value = '10';
+  addRow('Copper', '', 'mb');
+  addRow('Tin', '', 'mb');
+  populateTargets('Bronze');
   update();
 }
 
 function copySummary() {
   const mix = getMixture();
-  const total = totalOf(mix);
   const matches = findMatches(mix);
   const lines = [
     'TerraFirmaCraft Alloy Calculator',
-    `Total: ${fmt(total)} units`,
+    `Profile: ${activeProfile().name}`,
+    `Total: ${fmtMb(totalOf(mix))}`,
     `Result: ${matches.length ? matches.map(m => m.name).join(', ') : 'No valid alloy'}`,
     'Composition:',
-    ...Object.entries(percentages(mix)).map(([m, p]) => `- ${m}: ${fmt(mix[m])} units (${fmt(p)}%)`),
+    ...Object.entries(percentages(mix)).map(([m, p]) => `- ${m}: ${fmtMb(mix[m])} (${fmt(p)}%)`),
   ];
   navigator.clipboard?.writeText(lines.join('\n'));
 }
 
-function escapeHtml(value) {
-  return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[char]));
+function rebuildForProfile(shouldUpdate = true) {
+  populateProfileSelect();
+  refreshRowMetalOptions();
+  populateTargets(els.targetAlloy.value || 'Bronze');
+  renderRecipes();
+  updateProfileJsonBox();
+  persistProfiles();
+  if (shouldUpdate) update();
 }
 
-document.querySelector('#addRowBtn').addEventListener('click', () => addRow());
-document.querySelector('#resetBtn').addEventListener('click', reset);
-document.querySelector('#copySummaryBtn').addEventListener('click', copySummary);
-targetAlloyEl.addEventListener('change', update);
-plannedBatchEl.addEventListener('input', update);
-document.querySelectorAll('.quick-add button').forEach(btn => {
-  btn.addEventListener('click', () => {
-    if (!activeAmountInput) activeAmountInput = rowsEl.querySelector('.amount-input');
-    const add = Number(btn.dataset.fill);
-    activeAmountInput.value = fmt((Number(activeAmountInput.value) || 0) + add, 2);
-    activeAmountInput.dispatchEvent(new Event('input'));
-    activeAmountInput.focus();
-  });
-});
+function init() {
+  populateUnitSelect(els.capacityUnit, true);
+  populateUnitSelect(els.plannedUnit, true);
+  els.capacityUnit.value = 'mb';
+  els.plannedUnit.value = 'mb';
+  els.granularity.innerHTML = [
+    { value: 1, label: '1 mB' },
+    { value: 10, label: '10 mB units' },
+    { value: 100, label: 'Whole ingots' },
+  ].map(g => `<option value="${g.value}">${g.label}</option>`).join('');
+  els.granularity.value = '10';
+  renderUnitReference();
+  rebuildForProfile(false);
+  loadState();
 
-populateTargets();
-renderRecipes();
-loadState();
+  document.querySelector('#addRowBtn').addEventListener('click', () => addRow());
+  document.querySelector('#resetBtn').addEventListener('click', reset);
+  document.querySelector('#copySummaryBtn').addEventListener('click', copySummary);
+  els.profileSelect.addEventListener('change', () => { activeProfileId = els.profileSelect.value; rebuildForProfile(); });
+  els.targetAlloy.addEventListener('change', update);
+  els.plannedBatch.addEventListener('input', update);
+  els.plannedUnit.addEventListener('change', update);
+  els.granularity.addEventListener('change', update);
+  els.capacityAmount.addEventListener('input', update);
+  els.capacityUnit.addEventListener('change', update);
+  document.querySelector('#cloneProfileBtn').addEventListener('click', cloneCurrentProfile);
+  document.querySelector('#exportProfileBtn').addEventListener('click', exportProfileToClipboard);
+  document.querySelector('#downloadProfileBtn').addEventListener('click', downloadProfile);
+  document.querySelector('#applyProfileJsonBtn').addEventListener('click', () => {
+    try { applyProfile(JSON.parse(els.profileJson.value)); }
+    catch (err) { showProfileMessage(err.message || 'Could not apply profile JSON.', 'warning'); }
+  });
+  document.querySelector('#importProfileInput').addEventListener('change', event => importProfileFile(event.target.files?.[0]));
+  document.querySelectorAll('.quick-add button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!activeAmountInput) activeAmountInput = els.rows.querySelector('.amount-input');
+      if (!activeAmountInput) return;
+      const row = activeAmountInput.closest('.metal-row');
+      const fill = Number(btn.dataset.fill);
+      const add = fill === 100 ? 100 / unitById(row.querySelector('.unit-select').value).mb : fill;
+      activeAmountInput.value = fmt((Number(activeAmountInput.value) || 0) + add, 2);
+      activeAmountInput.dispatchEvent(new Event('input'));
+      activeAmountInput.focus();
+    });
+  });
+  update();
+}
+
+init();
