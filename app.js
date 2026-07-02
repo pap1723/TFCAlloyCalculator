@@ -96,6 +96,103 @@ function fmtMb(mb) {
   return `${fmt(mb)} mB`;
 }
 
+
+function ingotUnit() {
+  return unitDefs.find(u => u.id === 'ingot') || { id: 'ingot', label: 'Ingot / Mold', mb: 100, quick: true, locked: true };
+}
+
+function nearlyWhole(value, epsilon = 1e-7) {
+  return Math.abs(value - Math.round(value)) < epsilon;
+}
+
+function amountRemainder(amount, step) {
+  if (!Number.isFinite(amount) || !Number.isFinite(step) || step <= 0) return 0;
+  const remainder = amount % step;
+  return remainder < 1e-7 ? 0 : remainder;
+}
+
+function formatTotalOutput(total) {
+  const ingot = ingotUnit();
+  const ingotMb = Number(ingot.mb) || 100;
+  if (total <= 0) return `${fmtMb(total)} = 0 ${escapeHtml(ingot.label)}`;
+  const ingots = total / ingotMb;
+  const rem = amountRemainder(total, ingotMb);
+  const main = `${fmtMb(total)} = ${fmt(ingots, 4)} ${escapeHtml(ingot.label)}${nearlyWhole(ingots) ? '' : 's'}`;
+  if (!rem) return `${main} (full molds)`;
+  return `${main} · ${fmtMb(ingotMb - rem)} short of ${fmt(Math.ceil(ingots), 0)} or ${fmtMb(rem)} over ${fmt(Math.floor(ingots), 0)}`;
+}
+
+function formatUnitBreakdown(amount) {
+  if (!Number.isFinite(amount) || amount <= 0) return fmtMb(0);
+  const units = unitDefs
+    .filter(u => u.mb > 0 && u.id !== 'mb')
+    .sort((a, b) => b.mb - a.mb);
+  let remaining = amount;
+  const parts = [];
+  for (const unit of units) {
+    if (unit.mb <= remaining + 1e-7) {
+      const count = Math.floor((remaining + 1e-7) / unit.mb);
+      if (count > 0) {
+        parts.push(`${fmt(count, 0)} × ${escapeHtml(unit.label)}`);
+        remaining -= count * unit.mb;
+      }
+    }
+  }
+  if (remaining > 1e-6) parts.push(`${fmtMb(remaining)}`);
+  return parts.length ? `${fmtMb(amount)} (${parts.join(' + ')})` : fmtMb(amount);
+}
+
+function renderIngotRoundingCorrections(mix, candidateAlloys = []) {
+  const total = totalOf(mix);
+  const ingot = ingotUnit();
+  const ingotMb = Number(ingot.mb) || 100;
+  if (total <= 0 || ingotMb <= 0) return '';
+  const rem = amountRemainder(total, ingotMb);
+  if (!rem) {
+    return `<div class="mini-card"><h3>Full ${escapeHtml(ingot.label)} output</h3><p>Total output is already a whole number of ${escapeHtml(ingot.label)}s: <strong>${fmt(total / ingotMb, 4)}</strong>.</p></div>`;
+  }
+
+  const downTotal = Math.floor(total / ingotMb) * ingotMb;
+  const upTotal = Math.ceil(total / ingotMb) * ingotMb;
+  const downAmount = total - downTotal;
+  const upAmount = upTotal - total;
+  const matchingCandidates = candidateAlloys.filter(a => matchesRecipe(mix, a) || Object.keys(mix).every(m => Object.keys(a.ingredients).includes(m)));
+  const cap = capacityMb();
+
+  let addHtml = `<p>Add <strong>${formatUnitBreakdown(upAmount)}</strong> total to reach <strong>${fmt(upTotal / ingotMb, 0)} ${escapeHtml(ingot.label)}s</strong>.</p>`;
+  const addPlans = matchingCandidates
+    .map(alloy => ({ alloy, plan: calculatePlan(mix, alloy, upTotal) }))
+    .filter(item => item.plan.ok && Math.abs(item.plan.finalTotal - upTotal) < Math.max(1e-4, ingotMb * 1e-8))
+    .slice(0, 3);
+  if (addPlans.length) {
+    addHtml += addPlans.map(({ alloy, plan }) => {
+      const items = Object.entries(plan.additions).filter(([, amount]) => amount > 1e-6);
+      return `<div class="sub-card"><strong>Add while keeping ${escapeHtml(alloy.name)}:</strong><ul class="plan-list">${items.map(([m, amount]) => `<li>${escapeHtml(m)}: <strong>${formatUnitBreakdown(amount)}</strong></li>`).join('') || '<li>No additions needed.</li>'}</ul></div>`;
+    }).join('');
+  } else if (matchingCandidates.length) {
+    addHtml += `<p class="fine-print">No exact additive recipe was found for the next full ${escapeHtml(ingot.label)}. Add with care or use the Batch Planner for a nearby larger output.</p>`;
+  }
+  if (Number.isFinite(cap) && upTotal > cap) {
+    addHtml += `<div class="warning">Adding up to the next full ${escapeHtml(ingot.label)} would exceed capacity by ${fmtMb(upTotal - cap)}.</div>`;
+  }
+
+  let removeHtml = '';
+  if (downTotal > 0) {
+    const factor = downAmount / total;
+    removeHtml = `<p>Remove or avoid <strong>${formatUnitBreakdown(downAmount)}</strong> total to reach <strong>${fmt(downTotal / ingotMb, 0)} ${escapeHtml(ingot.label)}s</strong>.</p>`;
+    removeHtml += `<div class="sub-card"><strong>Proportional removal keeps the same percentages:</strong><ul class="plan-list">${Object.entries(mix).map(([m, amount]) => `<li>${escapeHtml(m)}: remove <strong>${formatUnitBreakdown(amount * factor)}</strong></li>`).join('')}</ul></div>`;
+  } else {
+    removeHtml = `<p>The current total is less than one ${escapeHtml(ingot.label)}, so only the add-up option makes a usable full output.</p>`;
+  }
+
+  return `<div class="mini-card">
+    <h3>Round output to full ${escapeHtml(ingot.label)}s</h3>
+    <p>Current output is <strong>${formatTotalOutput(total)}</strong>.</p>
+    ${addHtml}
+    ${removeHtml}
+  </div>`;
+}
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[char]));
 }
@@ -224,7 +321,7 @@ function update() {
   const matches = findMatches(mix);
   const cap = capacityMb();
 
-  els.totalUnits.textContent = fmtMb(total);
+  els.totalUnits.textContent = formatTotalOutput(total);
   els.capacityStatus.textContent = Number.isFinite(cap) ? `${fmtMb(Math.max(0, cap - total))} free` : 'No limit';
   els.matchingAlloy.textContent = matches.length ? matches.map(m => m.name).join(', ') : 'None';
   els.composition.innerHTML = renderComposition(mix);
@@ -324,12 +421,15 @@ function renderCorrections() {
     return;
   }
   if (matches.length) {
-    els.correctionOutput.innerHTML = `<div class="note">No correction needed. Current mix is valid for ${matches.map(m => `<strong>${escapeHtml(m.name)}</strong>`).join(', ')}.</div>`;
+    const ingotHtml = renderIngotRoundingCorrections(mix, matches);
+    els.correctionOutput.innerHTML = `<div class="note">No correction needed. Current mix is valid for ${matches.map(m => `<strong>${escapeHtml(m.name)}</strong>`).join(', ')}.</div>${ingotHtml}`;
     return;
   }
 
   const sameMetalRecipes = alloys().filter(alloy => Object.keys(mix).every(m => Object.keys(alloy.ingredients).includes(m)));
   const cards = [];
+  const roundingHtml = renderIngotRoundingCorrections(mix, matches.length ? matches : sameMetalRecipes);
+  if (roundingHtml) cards.push(roundingHtml);
   if (!sameMetalRecipes.length) {
     const offending = Object.keys(mix).filter(m => !alloys().some(a => Object.keys(a.ingredients).includes(m)));
     const allMixMetals = Object.keys(mix);
@@ -859,7 +959,7 @@ function copySummary() {
   const lines = [
     'TerraFirmaCraft Alloy Calculator',
     `Profile: ${activeProfile().name}`,
-    `Total: ${fmtMb(totalOf(mix))}`,
+    `Total: ${formatTotalOutput(totalOf(mix))}`, 
     `Result: ${matches.length ? matches.map(m => m.name).join(', ') : 'No valid alloy'}`,
     'Composition:',
     ...Object.entries(percentages(mix)).map(([m, p]) => `- ${m}: ${fmtMb(mix[m])} (${fmt(p)}%)`),

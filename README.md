@@ -17,10 +17,12 @@ A static TerraFirmaCraft alloy calculator that can be hosted directly on GitHub 
 - Alloy profile selector for TFC versions or modpacks
 - Import/export custom alloy profiles as JSON
 - Automatic alloy detection
+- Result total shown in mB and in configured ingot/mold output count
 - Percentage breakdown bars
 - Capacity warnings for vessels/crucibles
 - “What can I make?” recovery mode
 - Smart correction suggestions for invalid mixes
+- Full-ingot output recommendations that suggest adding up to or removing down to the nearest whole ingot/mold amount
 - Batch planner with valid ingredient ranges
 - Closest simple recipe solver using selectable granularity: 1 mB, 10 mB units, or whole ingots
 - Browser local storage for saved state, custom profiles, and custom unit settings
@@ -50,7 +52,7 @@ The two numbers are the minimum and maximum valid percentage for that ingredient
 
 ## Custom unit and item settings
 
-Open **Settings** in the app to change fluid amounts without editing code. This controls every unit conversion in the app, including metal input rows, capacity, batch planning, and recipe granularity.
+Open **Settings** in the app to change fluid amounts without editing code. This controls every unit conversion in the app, including metal input rows, capacity, batch planning, recipe granularity, and the result output count shown as ingots/molds.
 
 Useful examples:
 
@@ -70,6 +72,18 @@ Unit settings can be exported, downloaded, imported, or pasted as JSON:
 ```
 
 The `quick` flag makes the unit appear in compact selectors like capacity and batch output. All units appear in metal input rows.
+
+
+## Full ingot / mold output recommendations
+
+The Result panel now shows the total molten amount both as mB and as the number of configured `Ingot / Mold` outputs. For example, if `Ingot / Mold` is set to 100 mB, `2976 mB` displays as `29.76 Ingot / Mold` and shows how far it is from the nearest whole output.
+
+When the total is not a whole ingot/mold amount, **Smart Corrections** adds a rounding card:
+
+- **Add up** to the next full ingot/mold using the configured unit sizes.
+- **Remove down** to the previous full ingot/mold.
+- For valid alloys, additive suggestions try to preserve the current alloy recipe.
+- Removal suggestions are proportional so the alloy percentages stay the same.
 
 ## Custom profile JSON format
 

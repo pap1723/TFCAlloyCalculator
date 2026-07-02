@@ -110,6 +110,8 @@ code { color: #f5d990; }
 .mini-card { background: rgba(255,255,255,.04); border: 1px solid var(--line); }
 .mini-card h3 { color: var(--accent); margin-bottom: 6px; }
 .mini-card p { margin-bottom: 6px; }
+.sub-card { margin-top: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: rgba(0,0,0,.14); }
+.sub-card strong { color: var(--text); }
 .plan-list { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
 .plan-list li { margin: 4px 0; }
 .range-table { width: 100%; border-collapse: collapse; margin-top: 10px; overflow: hidden; border-radius: 12px; }
